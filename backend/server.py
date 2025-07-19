@@ -162,9 +162,120 @@ async def calculate_lead_stats() -> StatsResponse:
         converted_leads=converted_leads,
         lost_leads=lost_leads
     )
+# API Routes
 @api_router.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"message": "WTF HR Sales Engine API"}
+
+# Google Sheets Integration Routes
+@api_router.post("/sync-leads", response_model=ApiConfigResponse)
+async def sync_leads_from_sheets(config: ApiConfigRequest):
+    """Sync leads from Google Sheets API"""
+    try:
+        # Fetch data from Google Sheets
+        raw_data = await fetch_google_sheets_data(config.api_url)
+        
+        if not raw_data:
+            return ApiConfigResponse(
+                success=False, 
+                message="No data found in Google Sheets",
+                total_leads=0
+            )
+        
+        # Process and store leads
+        leads = await process_and_store_leads(raw_data)
+        
+        return ApiConfigResponse(
+            success=True,
+            message=f"Successfully synced {len(leads)} leads from Google Sheets",
+            total_leads=len(leads)
+        )
+    
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.error(f"Error syncing leads: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to sync leads: {str(e)}")
+
+@api_router.get("/test-connection")
+async def test_google_sheets_connection():
+    """Test connection to Google Sheets API"""
+    try:
+        raw_data = await fetch_google_sheets_data()
+        
+        return {
+            "success": True,
+            "message": "Connection successful",
+            "sample_data": raw_data[:2] if raw_data else [],
+            "total_records": len(raw_data)
+        }
+    
+    except HTTPException as e:
+        return {
+            "success": False,
+            "message": str(e.detail),
+            "sample_data": [],
+            "total_records": 0
+        }
+
+@api_router.get("/leads", response_model=List[LeadResponse])
+async def get_leads():
+    """Get all leads from database"""
+    try:
+        leads = await db.leads.find().sort("created_at", -1).to_list(1000)
+        
+        return [
+            LeadResponse(
+                user_id=lead["user_id"],
+                name=lead["name"],
+                gym_name=lead["gym_name"],
+                phone_number=lead["phone_number"],
+                status=lead["status"],
+                created_at=lead["created_at"]
+            ) for lead in leads
+        ]
+    
+    except Exception as e:
+        logger.error(f"Error fetching leads: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch leads: {str(e)}")
+
+@api_router.get("/stats", response_model=StatsResponse)
+async def get_lead_stats():
+    """Get lead statistics"""
+    try:
+        return await calculate_lead_stats()
+    except Exception as e:
+        logger.error(f"Error calculating stats: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to calculate stats: {str(e)}")
+
+@api_router.post("/refresh-data")
+async def refresh_leads_data():
+    """Refresh leads data from default Google Sheets URL"""
+    try:
+        # Fetch fresh data from Google Sheets
+        raw_data = await fetch_google_sheets_data()
+        
+        if not raw_data:
+            return {
+                "success": False,
+                "message": "No data found in Google Sheets"
+            }
+        
+        # Process and store leads
+        leads = await process_and_store_leads(raw_data)
+        
+        # Get updated stats
+        stats = await calculate_lead_stats()
+        
+        return {
+            "success": True,
+            "message": f"Data refreshed successfully. {len(leads)} leads processed.",
+            "stats": stats.dict()
+        }
+    
+    except Exception as e:
+        logger.error(f"Error refreshing data: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to refresh data: {str(e)}")
 
 @api_router.post("/status", response_model=StatusCheck)
 async def create_status_check(input: StatusCheckCreate):
