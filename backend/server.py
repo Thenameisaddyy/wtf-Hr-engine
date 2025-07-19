@@ -29,6 +29,40 @@ api_router = APIRouter(prefix="/api")
 
 
 # Define Models
+class Lead(BaseModel):
+    user_id: str = Field(alias="user id ")
+    name: str = Field(alias="name ")
+    gym_name: str = Field(alias="gym name ")
+    phone_number: str = Field(alias="phone number ")
+    status: str = Field(alias="status ")
+    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+
+    class Config:
+        allow_population_by_field_name = True
+
+class LeadResponse(BaseModel):
+    user_id: str
+    name: str
+    gym_name: str
+    phone_number: str
+    status: str
+    created_at: datetime
+
+class ApiConfigRequest(BaseModel):
+    api_url: str
+
+class ApiConfigResponse(BaseModel):
+    success: bool
+    message: str
+    total_leads: Optional[int] = None
+
+class StatsResponse(BaseModel):
+    total_leads: int
+    new_leads: int
+    qualified_leads: int
+    converted_leads: int
+    lost_leads: int
+
 class StatusCheck(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     client_name: str
