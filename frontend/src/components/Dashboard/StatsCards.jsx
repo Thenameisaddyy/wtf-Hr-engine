@@ -2,11 +2,11 @@ import React from 'react';
 import { Users, UserCheck, UserX, TrendingUp, Target } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 
-const StatsCards = ({ stats }) => {
+const StatsCards = ({ stats, loading }) => {
   const cards = [
     {
       title: 'Total Leads',
-      value: stats.totalLeads,
+      value: stats.totalLeads || 0,
       icon: Users,
       color: 'from-blue-500 to-blue-600',
       bgColor: 'bg-blue-50 dark:bg-blue-900/20',
@@ -15,7 +15,7 @@ const StatsCards = ({ stats }) => {
     },
     {
       title: 'New Leads',
-      value: stats.newLeads,
+      value: stats.newLeads || 0,
       icon: Target,
       color: 'from-red-500 to-red-600',
       bgColor: 'bg-red-50 dark:bg-red-900/20',
@@ -24,7 +24,7 @@ const StatsCards = ({ stats }) => {
     },
     {
       title: 'Qualified',
-      value: stats.qualifiedLeads,
+      value: stats.qualifiedLeads || 0,
       icon: UserCheck,
       color: 'from-green-500 to-green-600',
       bgColor: 'bg-green-50 dark:bg-green-900/20',
@@ -33,7 +33,7 @@ const StatsCards = ({ stats }) => {
     },
     {
       title: 'Converted',
-      value: stats.convertedLeads,
+      value: stats.convertedLeads || 0,
       icon: TrendingUp,
       color: 'from-purple-500 to-purple-600',
       bgColor: 'bg-purple-50 dark:bg-purple-900/20',
@@ -46,6 +46,8 @@ const StatsCards = ({ stats }) => {
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
       {cards.map((card, index) => {
         const Icon = card.icon;
+        const totalLeads = stats.totalLeads || 1; // Avoid division by zero
+        
         return (
           <Card key={index} className="group hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border-0 shadow-lg">
             <CardContent className="p-6">
@@ -55,30 +57,51 @@ const StatsCards = ({ stats }) => {
                     {card.title}
                   </p>
                   <div className="flex items-baseline space-x-2">
-                    <h3 className="text-3xl font-bold text-gray-900 dark:text-white">
-                      {card.value}
-                    </h3>
-                    <span className={`text-sm font-medium ${
-                      card.trend === 'up' ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      {card.change}
-                    </span>
+                    {loading ? (
+                      <div className="flex items-center space-x-2">
+                        <div className="w-12 h-8 bg-gray-200 dark:bg-gray-700 animate-pulse rounded"></div>
+                        <div className="w-8 h-4 bg-gray-200 dark:bg-gray-700 animate-pulse rounded"></div>
+                      </div>
+                    ) : (
+                      <>
+                        <h3 className="text-3xl font-bold text-gray-900 dark:text-white">
+                          {card.value}
+                        </h3>
+                        <span className={`text-sm font-medium ${
+                          card.trend === 'up' ? 'text-green-600' : 'text-red-600'
+                        }`}>
+                          {card.change}
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className={`${card.bgColor} p-3 rounded-xl group-hover:scale-110 transition-transform duration-300`}>
-                  <Icon className={`w-8 h-8 bg-gradient-to-r ${card.color} bg-clip-text text-transparent`} />
+                  {loading ? (
+                    <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 animate-pulse rounded"></div>
+                  ) : (
+                    <Icon className={`w-8 h-8 bg-gradient-to-r ${card.color} bg-clip-text text-transparent`} />
+                  )}
                 </div>
               </div>
               <div className="mt-4">
                 <div className="flex items-center space-x-2">
                   <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                    <div 
-                      className={`h-2 rounded-full bg-gradient-to-r ${card.color} transition-all duration-1000 ease-out`}
-                      style={{ width: `${Math.min(100, (card.value / stats.totalLeads) * 100)}%` }}
-                    ></div>
+                    {loading ? (
+                      <div className="h-2 bg-gray-300 dark:bg-gray-600 rounded-full animate-pulse"></div>
+                    ) : (
+                      <div 
+                        className={`h-2 rounded-full bg-gradient-to-r ${card.color} transition-all duration-1000 ease-out`}
+                        style={{ width: `${Math.min(100, Math.max(0, (card.value / totalLeads) * 100))}%` }}
+                      ></div>
+                    )}
                   </div>
                   <span className="text-xs text-gray-500 dark:text-gray-400">
-                    {Math.round((card.value / stats.totalLeads) * 100)}%
+                    {loading ? (
+                      <div className="w-8 h-3 bg-gray-200 dark:bg-gray-700 animate-pulse rounded"></div>
+                    ) : (
+                      `${Math.round((card.value / totalLeads) * 100)}%`
+                    )}
                   </span>
                 </div>
               </div>
