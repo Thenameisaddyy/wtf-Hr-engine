@@ -5,6 +5,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Badge } from '../ui/badge';
 import { useToast } from '../../hooks/use-toast';
+import axios from 'axios';
 import { 
   Database, 
   CheckCircle, 
@@ -16,11 +17,15 @@ import {
   Settings
 } from 'lucide-react';
 
-const ApiConfig = () => {
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const API = `${BACKEND_URL}/api`;
+
+const ApiConfig = ({ onDataUpdated }) => {
   const [apiUrl, setApiUrl] = useState('https://opensheet.elk.sh/1RsvlpFEVERK8myvdbQnlbt6yB2uz6gPHe9PqDpIbEdw/Sheet1');
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [lastSync, setLastSync] = useState(null);
+  const [connectionDetails, setConnectionDetails] = useState(null);
   const { toast } = useToast();
 
   const testConnection = async () => {
@@ -36,20 +41,78 @@ const ApiConfig = () => {
     setIsLoading(true);
     
     try {
-      // Mock API test - in real implementation this would make actual API call
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate API call
+      const response = await axios.get(`${API}/test-connection`);
       
-      setIsConnected(true);
-      setLastSync(new Date().toLocaleString());
-      toast({
-        title: "Success!",
-        description: "API connection established successfully",
-      });
+      if (response.data.success) {
+        setIsConnected(true);
+        setConnectionDetails(response.data);
+        setLastSync(new Date().toLocaleString());
+        toast({
+          title: "Success!",
+          description: `API connection established. Found ${response.data.total_records} records.`,
+        });
+      } else {
+        setIsConnected(false);
+        toast({
+          title: "Connection Failed",
+          description: response.data.message || "Unable to connect to the API",
+          variant: "destructive"
+        });
+      }
     } catch (error) {
       setIsConnected(false);
+      console.error('Connection test error:', error);
       toast({
         title: "Connection Failed",
-        description: "Unable to connect to the API. Please check the URL.",
+        description: error.response?.data?.detail || "Unable to connect to the API. Please check the URL.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const syncData = async () => {
+    if (!apiUrl.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter an API URL first",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    
+    try {
+      const response = await axios.post(`${API}/sync-leads`, {
+        api_url: apiUrl
+      });
+      
+      if (response.data.success) {
+        setLastSync(new Date().toLocaleString());
+        setIsConnected(true);
+        toast({
+          title: "Data Synced Successfully!",
+          description: `${response.data.total_leads} leads synchronized from Google Sheets`,
+        });
+        
+        // Callback to refresh dashboard data
+        if (onDataUpdated) {
+          onDataUpdated();
+        }
+      } else {
+        toast({
+          title: "Sync Failed",
+          description: response.data.message || "Unable to sync data",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Sync error:', error);
+      toast({
+        title: "Sync Failed",
+        description: error.response?.data?.detail || "Unable to sync data. Please try again.",
         variant: "destructive"
       });
     } finally {
@@ -63,38 +126,6 @@ const ApiConfig = () => {
       title: "Copied!",
       description: "API URL copied to clipboard",
     });
-  };
-
-  const syncData = async () => {
-    if (!isConnected) {
-      toast({
-        title: "Not Connected",
-        description: "Please test the API connection first",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsLoading(true);
-    
-    try {
-      // Mock sync - in real implementation this would fetch fresh data
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      setLastSync(new Date().toLocaleString());
-      toast({
-        title: "Data Synced",
-        description: "Successfully synced latest lead data",
-      });
-    } catch (error) {
-      toast({
-        title: "Sync Failed",
-        description: "Unable to sync data. Please try again.",
-        variant: "destructive"
-      });
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   return (
@@ -149,11 +180,12 @@ const ApiConfig = () => {
               </p>
             </div>
 
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-3 flex-wrap gap-2">
               <Button 
                 onClick={testConnection} 
                 disabled={isLoading}
-                className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700"
+                variant="outline"
+                className="hover:bg-red-50 border-red-200"
               >
                 {isLoading ? (
                   <>
@@ -165,6 +197,21 @@ const ApiConfig = () => {
                 )}
               </Button>
 
+              <Button 
+                onClick={syncData} 
+                disabled={isLoading}
+                className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700"
+              >
+                {isLoading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Syncing...
+                  </>
+                ) : (
+                  'Sync Data Now'
+                )}
+              </Button>
+
               {isConnected && (
                 <Badge className="bg-green-100 text-green-800">
                   <CheckCircle className="w-3 h-3 mr-1" />
@@ -173,15 +220,19 @@ const ApiConfig = () => {
               )}
             </div>
 
-            {isConnected && (
+            {isConnected && connectionDetails && (
               <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                <div className="flex items-center space-x-2 text-green-700 dark:text-green-400">
+                <div className="flex items-center space-x-2 text-green-700 dark:text-green-400 mb-2">
                   <CheckCircle className="w-4 h-4" />
                   <span className="text-sm font-medium">API Connected Successfully</span>
                 </div>
-                <p className="text-xs text-green-600 dark:text-green-300 mt-1">
-                  Ready to fetch lead data from your Google Sheet
-                </p>
+                <div className="text-xs text-green-600 dark:text-green-300 space-y-1">
+                  <p>Total Records: {connectionDetails.total_records}</p>
+                  <p>Ready to fetch lead data from your Google Sheet</p>
+                  {connectionDetails.sample_data && connectionDetails.sample_data.length > 0 && (
+                    <p>Sample: {connectionDetails.sample_data[0].name || 'Data available'}</p>
+                  )}
+                </div>
               </div>
             )}
           </CardContent>
@@ -209,7 +260,7 @@ const ApiConfig = () => {
                 variant="outline"
                 size="sm"
                 onClick={syncData}
-                disabled={!isConnected || isLoading}
+                disabled={isLoading}
                 className="hover:bg-red-50 border-red-200"
               >
                 {isLoading ? (
@@ -293,11 +344,11 @@ const ApiConfig = () => {
                 </li>
                 <li className="flex items-start space-x-2">
                   <span className="flex-shrink-0 w-5 h-5 bg-red-100 text-red-600 rounded-full flex items-center justify-center text-xs font-bold">3</span>
-                  <span>Use "Sync Now" to fetch latest data</span>
+                  <span>Use "Sync Data Now" to fetch latest data</span>
                 </li>
                 <li className="flex items-start space-x-2">
                   <span className="flex-shrink-0 w-5 h-5 bg-red-100 text-red-600 rounded-full flex items-center justify-center text-xs font-bold">4</span>
-                  <span>Data will appear in the "New Leads" section</span>
+                  <span>Data will appear in the "Dashboard" section</span>
                 </li>
               </ol>
             </div>
