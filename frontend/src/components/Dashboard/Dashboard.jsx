@@ -3,14 +3,93 @@ import Sidebar from './Sidebar';
 import Header from './Header';
 import DashboardMain from './DashboardMain';
 import ApiConfig from './ApiConfig';
-import { mockLeads, mockStats } from '../../mock/mockData';
+import axios from 'axios';
+
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const API = `${BACKEND_URL}/api`;
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [darkMode, setDarkMode] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [leads, setLeads] = useState(mockLeads);
-  const [stats, setStats] = useState(mockStats);
+  const [leads, setLeads] = useState([]);
+  const [stats, setStats] = useState({
+    totalLeads: 0,
+    newLeads: 0,
+    qualifiedLeads: 0,
+    convertedLeads: 0,
+    lostLeads: 0
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Fetch leads from backend
+  const fetchLeads = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`${API}/leads`);
+      setLeads(response.data);
+      setError(null);
+    } catch (error) {
+      console.error('Error fetching leads:', error);
+      setError('Failed to fetch leads data');
+      setLeads([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch stats from backend
+  const fetchStats = async () => {
+    try {
+      const response = await axios.get(`${API}/stats`);
+      setStats({
+        totalLeads: response.data.total_leads,
+        newLeads: response.data.new_leads,
+        qualifiedLeads: response.data.qualified_leads,
+        convertedLeads: response.data.converted_leads,
+        lostLeads: response.data.lost_leads
+      });
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+      setStats({
+        totalLeads: 0,
+        newLeads: 0,
+        qualifiedLeads: 0,
+        convertedLeads: 0,
+        lostLeads: 0
+      });
+    }
+  };
+
+  // Refresh data from Google Sheets
+  const refreshData = async () => {
+    try {
+      setLoading(true);
+      await axios.post(`${API}/refresh-data`);
+      await Promise.all([fetchLeads(), fetchStats()]);
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+      setError('Failed to refresh data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Initial data fetch
+  useEffect(() => {
+    fetchLeads();
+    fetchStats();
+  }, []);
+
+  // Auto-refresh data every 5 minutes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refreshData();
+    }, 300000); // 5 minutes
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Dark mode toggle
   const toggleDarkMode = () => {
@@ -30,11 +109,34 @@ const Dashboard = () => {
   const renderActiveComponent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <DashboardMain stats={stats} leads={leads} />;
+        return (
+          <DashboardMain 
+            stats={stats} 
+            leads={leads} 
+            loading={loading} 
+            error={error}
+            onRefresh={refreshData}
+          />
+        );
       case 'leads':
-        return <DashboardMain stats={stats} leads={leads} />;
+        return (
+          <DashboardMain 
+            stats={stats} 
+            leads={leads} 
+            loading={loading} 
+            error={error}
+            onRefresh={refreshData}
+          />
+        );
       case 'api-config':
-        return <ApiConfig />;
+        return (
+          <ApiConfig 
+            onDataUpdated={() => {
+              fetchLeads();
+              fetchStats();
+            }}
+          />
+        );
       case 'analytics':
         return (
           <div className="flex items-center justify-center h-96 bg-gray-50 dark:bg-gray-800 rounded-xl">
@@ -96,7 +198,15 @@ const Dashboard = () => {
           </div>
         );
       default:
-        return <DashboardMain stats={stats} leads={leads} />;
+        return (
+          <DashboardMain 
+            stats={stats} 
+            leads={leads} 
+            loading={loading} 
+            error={error}
+            onRefresh={refreshData}
+          />
+        );
     }
   };
 
